@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+
+<!--
+# Live form
+
+Form that updates it's output values automatically
+
+Constraints: 
+ * output fields must come after all of their dependencies
+ * operation strategy separation is not properly implemented, proper separation is left for the enginner adopting the custom component
+
+
+ The example is a working a matrix multiplication example, and three other divisions based on the result matrix's
+ values
+
+ TODO: Dependency resolution is naive and simple. Needs proper dependency exploration
+
+-->
+
+<head>
+    <style>
+        live-form {
+            display: grid;
+            width: fit-content;
+            grid-template-areas:
+                "- Y"
+                "X Z";
+        }
+
+
+        live-form>fieldset {
+            display: flex;
+
+        }
+
+        fieldset {
+            display: flex;
+            width: fit-content;
+
+            div {
+                display: flex;
+                flex-direction: column;
+
+                label {
+                    display: flex;
+
+                    input {
+                        width: 4em;
+                    }
+
+                    output {
+                        width: 4em;
+                        border: 1px solid black;
+                        border-radius: 15%;
+                    }
+                }
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <live-form>
+        <fieldset id="X_matrix" style="grid-area: X;">
+            <div>
+                <label>X11<input type="number" id="X11" name="X11" value="0" /></label>
+                <label>X12<input type="number" id="X12" name="X12" value="0" /></label>
+                <label>X13<input type="number" id="X13" name="X13" value="0" /></label>
+                <label>X14<input type="number" id="X14" name="X14" value="1" /></label>
+            </div>
+            <div>
+                <label>X21<input type="number" id="X21" name="X21" value="0" /></label>
+                <label>X22<input type="number" id="X22" name="X22" value="0" /></label>
+                <label>X23<input type="number" id="X23" name="X23" value="0" /></label>
+                <label>X24<input type="number" id="X24" name="X24" value="1" /></label>
+            </div>
+            <div>
+                <label>X31<input type="number" id="X31" name="X31" value="0" /></label>
+                <label>X32<input type="number" id="X32" name="X32" value="0" /></label>
+                <label>X33<input type="number" id="X33" name="X33" value="0" /></label>
+                <label>X34<input type="number" id="X34" name="X34" value="1" /></label>
+            </div>
+            <div>
+                <label>X41<input type="number" id="X41" name="X41" value="0" /></label>
+                <label>X42<input type="number" id="X42" name="X42" value="0" /></label>
+                <label>X43<input type="number" id="X43" name="X43" value="0" /></label>
+                <label>X44<input type="number" id="X44" name="X44" value="1" /></label>
+            </div>
+        </fieldset>
+        <fieldset id="Y_matrix" style="grid-area: Y;">
+            <div>
+                <label>Y11<input type="number" id="Y11" name="Y11" value="0" /></label>
+                <label>Y12<input type="number" id="Y12" name="Y12" value="0" /></label>
+                <label>Y13<input type="number" id="Y13" name="Y13" value="0" /></label>
+                <label>Y14<input type="number" id="Y14" name="Y14" value="0" /></label>
+            </div>
+            <div>
+                <label>Y21<input type="number" id="Y21" name="Y21" value="0" /></label>
+                <label>Y22<input type="number" id="Y22" name="Y22" value="0" /></label>
+                <label>Y23<input type="number" id="Y23" name="Y23" value="0" /></label>
+                <label>Y24<input type="number" id="Y24" name="Y24" value="0" /></label>
+            </div>
+            <div>
+                <label>Y31<input type="number" id="Y31" name="Y31" value="0" /></label>
+                <label>Y32<input type="number" id="Y32" name="Y32" value="0" /></label>
+                <label>Y33<input type="number" id="Y33" name="Y33" value="0" /></label>
+                <label>Y34<input type="number" id="Y34" name="Y34" value="0" /></label>
+            </div>
+            <div>
+                <label>Y41<input type="number" id="Y41" name="Y41" value="0" /></label>
+                <label>Y42<input type="number" id="Y42" name="Y42" value="0" /></label>
+                <label>Y43<input type="number" id="Y43" name="Y43" value="0" /></label>
+                <label>Y44<input type="number" id="Y44" name="Y44" value="1" /></label>
+            </div>
+        </fieldset>
+        <fieldset id="Z_matrix" style="grid-area: Z;">
+            <div>
+                <label>Z11<output id="Z11" name="Z11" for="X11 X21 X31 X41 Y11 Y12 Y13 Y14"></output></label>
+                <label>Z12<output id="Z12" name="Z12" for="X12 X22 X32 X42 Y11 Y12 Y13 Y14"></output></label>
+                <label>Z13<output id="Z13" name="Z13" for="X13 X23 X33 X43 Y11 Y12 Y13 Y14"></output></label>
+                <label>Z14<output id="Z14" name="Z14" for="X13 X23 X34 X44 Y11 Y12 Y13 Y14"></output></label>
+            </div>
+            <div>
+                <label>Z21<output id="Z21" name="Z21" for="X11 X21 X31 X41 Y21 Y22 Y23 Y24"></output></label>
+                <label>Z22<output id="Z22" name="Z22" for="X12 X22 X32 X42 Y21 Y22 Y23 Y24"></output></label>
+                <label>Z23<output id="Z23" name="Z23" for="X13 X23 X33 X43 Y21 Y22 Y23 Y24"></output></label>
+                <label>Z24<output id="Z24" name="Z24" for="X13 X23 X34 X44 Y21 Y22 Y23 Y24"></output></label>
+            </div>
+            <div>
+                <label>Z31<output id="Z31" name="Z31" for="X11 X21 X31 X41 Y31 Y32 Y33 Y34"></output></label>
+                <label>Z32<output id="Z32" name="Z32" for="X12 X22 X32 X42 Y31 Y32 Y33 Y34"></output></label>
+                <label>Z33<output id="Z33" name="Z33" for="X13 X23 X33 X43 Y31 Y32 Y33 Y34"></output></label>
+                <label>Z33<output id="Z34" name="Z34" for="X13 X23 X34 X44 Y31 Y32 Y33 Y34"></output></label>
+            </div>
+            <div>
+                <label>Z41<output id="Z41" name="Z41" for="X11 X21 X31 X41 Y41 Y42 Y43 Y44"></output></label>
+                <label>Z42<output id="Z42" name="Z42" for="X12 X22 X32 X42 Y41 Y42 Y43 Y44"></output></label>
+                <label>Z43<output id="Z43" name="Z43" for="X13 X23 X33 X43 Y41 Y42 Y43 Y44"></output></label>
+                <label>Z44<output id="Z44" name="Z44" for="X13 X23 X34 X44 Y41 Y42 Y43 Y44"></output></label>
+            </div>
+        </fieldset>
+        <fieldset>
+            <div>
+
+                <label>X/W<output id="X/W" name="X/W" for="Z11 Z41" data-op="div"></output></label>
+                <label>X/W<output id="Y/W" name="Y/W" for="Z22 Z42" data-op="div"></output></label>
+                <label>X/W<output id="Z/W" name="Z/W" for="Z33 Z43" data-op="div"></output></label>
+            </div>
+        </fieldset>
+    </live-form>
+
+</body>
+<script>
+
+    function calcMatrixElem(x1, x2, x3, x4, y1, y2, y3, y4) {
+        return x1 * y1 + x2 * y2 + x3 * y3 + x4 * y4;
+    }
+
+    class LiveForm extends HTMLElement {
+        #deps;
+        #inputs;
+        #input_ids;
+        #outputs;
+
+        constructor() {
+            super();
+
+            this.#deps = new Map();
+            this.#inputs = [];
+            this.#input_ids = [];
+            this.#outputs = [];
+        }
+
+
+
+        #updateOutputs(e) {
+            console.log(e.target.id)
+            const dirtys = this.#deps.get(e.target.id) ?? [];
+            console.log(dirtys)
+            for (let dirty of dirtys) {
+                console.log(dirty, dirty.dataset.op)
+                if (!dirty.dataset.op) {
+                    const [x1, x2, x3, x4, y1, y2, y3, y4] = dirty.getAttribute("for").split(" ").map(id => this.#inputs.find(el => el.id === id)).map(el => Number(el.value));
+                    dirty.value = calcMatrixElem(
+                        x1, x2, x3, x4,
+                        y1, y2, y3, y4
+                    );
+                } else {
+                    switch (dirty.dataset.op) {
+                        case "div":
+                            const [a, b] = dirty.getAttribute("for").split(" ")
+                                .map(id => this.#inputs.find(el => el.id === id) ?? this.#outputs.find(el => el.id === id))
+                                .map(el => Number(el.value));
+                            console.log(a, b)
+                            dirty.value = a / b;
+                            break;
+                    }
+                }
+            }
+        }
+
+
+        #discoverDependencies() {
+            const isInput = (dep) => { return this.#input_ids.includes(dep); }
+
+            for (let o of this.#outputs) {
+                const deps = o.getAttribute("for").split(" ");
+
+                for (let dep of deps) {
+                    if (isInput(dep)) {
+                        const existing = this.#deps.get(dep) ?? [];
+                        this.#deps.set(dep, existing.concat(o));
+                    } else {
+                        //TODO: solve secondary dependencies
+                        for (let [key, value] of this.#deps) {
+                            const included_ids = value.map(el => el.id);
+                            if (included_ids.includes(dep) && !included_ids.includes(o.id)) {
+                                this.#deps.get(key).push(o);
+                            }
+                        }
+                    }
+
+                }
+            }
+            console.log(this.#deps)
+
+        }
+
+        connectedCallback() {
+            this.#inputs = [...this.getElementsByTagName('input')];
+            this.#input_ids = this.#inputs.map(i => i.id);
+            this.#outputs = [...this.getElementsByTagName('output')];
+
+            this.#discoverDependencies();
+            this.addEventListener('input', this.#updateOutputs);
+        }
+
+        disconnectedCallback() {
+            console.log("Custom element removed from page.");
+        }
+
+        connectedMoveCallback() {
+            console.log("Custom element moved with moveBefore()");
+        }
+
+        adoptedCallback() {
+            console.log("Custom element moved to new page.");
+        }
+
+        attributeChangedCallback(name, oldValue, newValue) {
+            console.log(`Attribute ${name} has changed.`);
+        }
+
+    }
+
+    customElements.define("live-form", LiveForm);
+
+</script>
+
+</html>
