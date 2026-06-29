@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+
+<!--
+    auto-complete — typeahead suggestion list bound to an <input>
+
+    A list of suggestions shown as a popover anchored beneath an <input> (the
+    input found in the auto-complete's parent). Typing shows and filters the
+    list; focus STAYS in the input (the WAI-ARIA combobox pattern). ArrowUp/Down
+    move a virtual highlight via aria-activedescendant, Enter or click fills the
+    input. Light-dismiss (click outside / Escape) comes from popover="auto".
+
+    Self-contained, like context-menu.html. It uses a plain popover element,
+    NOT a <dialog>: a <dialog> shown as a popover steals focus into itself,
+    which would pull focus out of the input and stop you typing.
+
+    example:
+
+    <label>
+        Fruit
+        <input type="text">
+        <auto-complete>
+            <li><button>Apple</button></li>
+            <li><button>Banana</button></li>
+        </auto-complete>
+    </label>
+
+    ARIA: input role=combobox + aria-expanded / aria-activedescendant,
+          auto-complete role=listbox, items role=option. The roles + ids sit on
+          light-DOM elements so the input's IDREFs resolve in the same scope;
+          the shadow popover is just visual chrome (role=none).
+-->
+
+<html>
+
+<head>
+    <style>
+        label {
+            display: inline-block;
+            font-family: sans-serif;
+        }
+
+        input {
+            font: inherit;
+            padding: 0.3em 0.5em;
+        }
+
+        auto-complete li {
+            list-style: none;
+        }
+
+        auto-complete button {
+            display: block;
+            width: 100%;
+            padding: 0.4em 1em;
+            border: none;
+            background: none;
+            text-align: left;
+            font: inherit;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        auto-complete button:hover,
+        auto-complete button[aria-selected="true"] {
+            background: #2563eb;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <label>
+        Fruit
+        <input type="text" placeholder="type to search&hellip;">
+        <auto-complete>
+            <li><button>Apple</button></li>
+            <li><button>Apricot</button></li>
+            <li><button>Banana</button></li>
+            <li><button>Blueberry</button></li>
+            <li><button>Cherry</button></li>
+            <li><button>Mango</button></li>
+        </auto-complete>
+    </label>
+
+    <script>
+
+        let uid = 0;
+
+        class AutoComplete extends HTMLElement {
+            #panel;
+            #input = null;
+            #active = -1;
+            #ready = false;
+            #skipOpen = false;   // guards against #choose -> input.focus() reopening
+
+            constructor() {
+                super();
+                this.attachShadow({ mode: "open" });
+                this.shadowRoot.innerHTML = `
+<style>
+    [popover] {
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        padding: 0.3em 0;
+        border: 1px solid #888;
+        border-radius: 4px;
+        background: white;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+    }
+    ::slotted(li) { list-style: none; margin: 0; }
+</style>
+<div popover="auto" role="none"><slot></slot></div>`;
+
+                this.#panel = this.shadowRoot.querySelector("[popover]");
+
+                this.#panel.addEventListener("toggle", (e) => {
+                    const open = e.newState === "open";
+                    this.toggleAttribute("open", open);
+                    this.#input?.setAttribute("aria-expanded", String(open));
+                    if (!open) this.#setActive(-1);
+                });
+            }
+
+            // Anchor under the bound input rather than the parent host.
+            get anchor() {
+                return this.#input || this.parentElement;
+            }
+
+            get open() {
+                return this.hasAttribute("open");
+            }
+
+            connectedCallback() {
+                if (this.#ready) return;   // connectedCallback can fire more than once
+                this.#ready = true;
+
+                // role=listbox + option ids live on light-DOM elements so the
+                // input's aria-controls / aria-activedescendant IDREFs resolve in
+                // the same scope. The shadow popover is just visual chrome.
+                this.setAttribute("role", "listbox");
+                if (!this.id) this.id = `ac-list-${uid++}`;
+
+                this.#options().forEach((opt) => {
+                    opt.setAttribute("role", "option");
+                    if (!opt.id) opt.id = `ac-opt-${uid++}`;
+                    opt.tabIndex = -1;
+                });
+
+                this.#input = this.parentElement.querySelector("input");
+                if (!this.#input) return;
+
+                const input = this.#input;
+                input.setAttribute("role", "combobox");
+                input.setAttribute("aria-autocomplete", "list");
+                input.setAttribute("aria-controls", this.id);
+                input.setAttribute("aria-expanded", "false");
+                input.autocomplete = "off";
+
+                input.addEventListener("input", () => {
+                    this.#filter(input.value);
+                    if (input.value.trim() && this.#visible().length) this.show();
+                    else this.hide();
+                });
+
+                input.addEventListener("focus", () => {
+                    if (this.#skipOpen) return;
+                    if (input.value.trim() && this.#visible().length) this.show();
+                });
+
+                input.addEventListener("keydown", (e) => this.#onKeydown(e));
+
+                // Close when focus leaves the input for anything outside the list
+                // (e.g. Tab-away). Clicking an option focuses it (relatedTarget is
+                // inside this listbox), so that selection is preserved.
+                input.addEventListener("blur", (e) => {
+                    if (e.relatedTarget && this.contains(e.relatedTarget)) return;
+                    this.hide();
+                });
+
+                // Clicking an option fills the input.
+                this.addEventListener("click", (e) => {
+                    const opt = e.target.closest("button");
+                    if (opt) this.#choose(opt);
+                });
+            }
+
+            show() {
+                const r = this.anchor.getBoundingClientRect();
+                this.#panel.style.left = `${r.left}px`;
+                this.#panel.style.top = `${r.bottom}px`;
+                this.#panel.style.minWidth = `${r.width}px`;
+                if (!this.#panel.matches(":popover-open")) this.#panel.showPopover();
+            }
+
+            hide() {
+                if (this.#panel.matches(":popover-open")) this.#panel.hidePopover();
+            }
+
+            #options() {
+                return [...this.querySelectorAll("button")];
+            }
+
+            #row(opt) {
+                return opt.closest("li") || opt;
+            }
+
+            #visible() {
+                return this.#options().filter((o) => this.#row(o).style.display !== "none");
+            }
+
+            #filter(query) {
+                const q = query.trim().toLowerCase();
+                this.#options().forEach((o) => {
+                    const match = o.textContent.toLowerCase().includes(q);
+                    this.#row(o).style.display = match ? "" : "none";
+                });
+                this.#setActive(-1);
+            }
+
+            #setActive(i) {
+                const visible = this.#visible();
+                this.#options().forEach((o) => o.removeAttribute("aria-selected"));
+
+                if (i < 0 || !visible.length) {
+                    this.#active = -1;
+                    this.#input?.removeAttribute("aria-activedescendant");
+                    return;
+                }
+
+                this.#active = (i + visible.length) % visible.length;
+                const opt = visible[this.#active];
+                opt.setAttribute("aria-selected", "true");
+                opt.scrollIntoView({ block: "nearest" });
+                this.#input.setAttribute("aria-activedescendant", opt.id);
+            }
+
+            #onKeydown(e) {
+                switch (e.key) {
+                    case "ArrowDown":
+                        e.preventDefault();
+                        if (!this.open) {
+                            this.#filter(this.#input.value);
+                            if (this.#visible().length) this.show();
+                        }
+                        this.#setActive(this.#active + 1);
+                        break;
+                    case "ArrowUp":
+                        e.preventDefault();
+                        this.#setActive(this.#active - 1);
+                        break;
+                    case "Enter": {
+                        const opt = this.#visible()[this.#active];
+                        if (opt) { e.preventDefault(); this.#choose(opt); }
+                        break;
+                    }
+                    case "Escape":
+                        this.hide();
+                        break;
+                }
+            }
+
+            #choose(opt) {
+                this.#input.value = opt.textContent.trim();
+                this.hide();
+                this.#skipOpen = true;
+                this.#input.focus();
+                this.#skipOpen = false;
+                this.#input.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+        }
+
+        customElements.define("auto-complete", AutoComplete);
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+
+<!--
+    drop-down — command menu (left-click / host toggle)
+
+    A linear list of command buttons shown as a popover anchored beneath its
+    host. The host is the drop-down's parent element; clicking it (or focusing
+    it and pressing ArrowDown / Enter / Space) toggles the menu. Selecting an
+    item runs it and closes the menu. Light-dismiss (click outside / Escape)
+    comes for free from the native popover="auto".
+
+    Self-contained, like context-menu.html. It uses a plain popover element,
+    NOT a <dialog>: a <dialog> shown as a popover steals focus into itself,
+    which would break the roving menu focus.
+
+    example:
+
+    <div tabindex="0">                  the host: clicking it toggles the menu
+        Account
+        <drop-down>
+            <li><button>Profile</button></li>
+            <li><button>Logout</button></li>
+        </drop-down>
+    </div>
+
+    ARIA: panel role=menu, items role=menuitem; ArrowUp/Down roving focus,
+          Home/End, Escape to close and refocus the host.
+-->
+
+<html>
+
+<head>
+    <style>
+        .menu-host {
+            display: inline-block;
+            padding: 0.4em 0.8em;
+            border: 1px solid #888;
+            border-radius: 4px;
+            cursor: pointer;
+            user-select: none;
+            font-family: sans-serif;
+        }
+
+        /* the slotted command items */
+        drop-down li {
+            list-style: none;
+        }
+
+        drop-down button {
+            display: block;
+            width: 100%;
+            padding: 0.4em 1em;
+            border: none;
+            background: none;
+            text-align: left;
+            font: inherit;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        drop-down button:hover,
+        drop-down button:focus {
+            background: #2563eb;
+            color: white;
+            outline: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="menu-host" tabindex="0">
+        Account &#9662;
+        <drop-down>
+            <li><button>Profile</button></li>
+            <li><button>Settings</button></li>
+            <li><button>Logout</button></li>
+        </drop-down>
+    </div>
+
+    <script>
+
+        class DropDown extends HTMLElement {
+            #panel;
+            #index = -1;
+            #wasOpen = false;   // menu's open-state captured at pointerdown
+            #ready = false;
+
+            constructor() {
+                super();
+                this.attachShadow({ mode: "open" });
+                this.shadowRoot.innerHTML = `
+<style>
+    menu {
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        padding: 0.3em 0;
+        list-style: none;
+        border: 1px solid #888;
+        border-radius: 4px;
+        background: white;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+    }
+    ::slotted(li) { list-style: none; margin: 0; }
+</style>
+<menu popover="auto" role="menu"><slot></slot></menu>`;
+
+                this.#panel = this.shadowRoot.querySelector("menu");
+
+                // popover="auto" handles light-dismiss + Escape; mirror its state
+                // onto the `open` attribute and drive focus from it.
+                this.#panel.addEventListener("toggle", (e) => {
+                    this.toggleAttribute("open", e.newState === "open");
+                    if (e.newState === "open") this.#focus(0);
+                });
+            }
+
+            get host() {
+                return this.parentElement;
+            }
+
+            get open() {
+                return this.hasAttribute("open");
+            }
+
+            connectedCallback() {
+                if (this.#ready) return;   // connectedCallback can fire more than once
+                this.#ready = true;
+
+                this.#items().forEach((btn) => {
+                    btn.setAttribute("role", "menuitem");
+                    btn.tabIndex = -1;
+                });
+
+                const host = this.host;
+                if (host.tabIndex < 0) host.tabIndex = 0;
+                host.setAttribute("aria-haspopup", "menu");
+
+                // Capture open-state when the press starts: if the menu was open,
+                // the browser's light-dismiss closes it during this same click, so
+                // we must not reopen. The `open` attribute lags (it's set by the
+                // async toggle event), so at pointerdown it still reflects the
+                // pre-dismiss state.
+                host.addEventListener("pointerdown", () => { this.#wasOpen = this.open; });
+
+                host.addEventListener("click", (e) => {
+                    if (this.contains(e.target)) return;   // clicks on menu items
+                    if (this.#wasOpen) { this.hide(); return; }   // toggling closed
+                    this.show();
+                });
+
+                host.addEventListener("keydown", (e) => {
+                    if (this.contains(e.target)) return;   // keys handled inside the menu
+                    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        this.show();
+                    }
+                });
+
+                // popover="auto" only light-dismisses on outside click + Escape;
+                // close on keyboard Tab-away too, so the open menu never becomes
+                // an orphan that can't be reached again. (relatedTarget inside the
+                // host — including the slotted menu items — keeps it open.)
+                host.addEventListener("focusout", (e) => {
+                    if (e.relatedTarget && host.contains(e.relatedTarget)) return;
+                    this.hide();
+                });
+
+                // Roving focus over the menu items.
+                this.addEventListener("keydown", (e) => this.#onKeydown(e));
+
+                // Selecting an item lets its own click run, then closes the menu
+                // and returns focus to the host.
+                this.addEventListener("click", (e) => {
+                    if (e.target.closest("button")) {
+                        this.hide();
+                        host.focus();
+                    }
+                });
+            }
+
+            show() {
+                const r = this.host.getBoundingClientRect();
+                this.#panel.style.left = `${r.left}px`;
+                this.#panel.style.top = `${r.bottom}px`;
+                this.#panel.style.minWidth = `${r.width}px`;
+                if (!this.#panel.matches(":popover-open")) this.#panel.showPopover();
+            }
+
+            hide() {
+                if (this.#panel.matches(":popover-open")) this.#panel.hidePopover();
+            }
+
+            #items() {
+                return [...this.querySelectorAll("button")];
+            }
+
+            #focus(i) {
+                const items = this.#items();
+                if (!items.length) return;
+                this.#index = (i + items.length) % items.length;
+                items[this.#index].focus();
+            }
+
+            #onKeydown(e) {
+                switch (e.key) {
+                    case "ArrowDown": e.preventDefault(); this.#focus(this.#index + 1); break;
+                    case "ArrowUp": e.preventDefault(); this.#focus(this.#index - 1); break;
+                    case "Home": e.preventDefault(); this.#focus(0); break;
+                    case "End": e.preventDefault(); this.#focus(this.#items().length - 1); break;
+                    case "Escape": this.hide(); this.host.focus(); break;
+                }
+            }
+        }
+
+        customElements.define("drop-down", DropDown);
+
+    </script>
+</body>
+
+</html>
