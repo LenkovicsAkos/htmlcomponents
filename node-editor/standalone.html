@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>templated-table — standalone (no React)</title>
+    <style>
+      body { font-family: system-ui, sans-serif; padding: 24px; }
+      /* Cells are slotted light DOM, so they're styled from the page. */
+      templated-table th,
+      templated-table td { border: 1px solid #ccc; padding: 6px 12px; text-align: left; }
+    </style>
+  </head>
+  <body>
+    <h1>Same component, no framework</h1>
+    <p>The exact same element used in <code>App.tsx</code>, driven by plain JS.</p>
+
+    <templated-table id="people">
+      <thead>
+        <tr>
+          <th data-value="name">Name</th>
+          <th data-value="born">Born</th>
+        </tr>
+      </thead>
+      <template>
+        <tr>
+          <td data-value="name"></td>
+          <td data-value="born"></td>
+        </tr>
+      </template>
+    </templated-table>
+
+    <button id="add" type="button">Add row</button>
+
+    <script type="module">
+      import './src/custom-components/templated-table.ts';
+
+      const table = document.getElementById('people');
+      // Data arrives as a property — identical contract to React's data={...}.
+      table.data = [
+        { name: 'Ada Lovelace', born: 1815 },
+        { name: 'Grace Hopper', born: 1906 },
+      ];
+
+      document.getElementById('add').addEventListener('click', () => {
+        table.data = [...table.data, { name: `Person ${table.data.length + 1}`, born: 2000 }];
+      });
+    </script>
+  </body>
+</html>
