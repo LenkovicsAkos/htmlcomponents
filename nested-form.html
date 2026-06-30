@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style></style>
+</head>
+
+<body>
+    <main>
+        <form is="nested-form">
+            <label>name <input type="text" name="name" value="" /></label>
+            <label>desc <input type="text" name="desc" value="" /></label>
+            <fieldset name="A">
+                <div style="display: flex; flex-direction: column; padding: 9px;">
+                    <label>A <input type="text" name="A1" value="" multiple /></label>
+                    <label>B <input type="text" name="B2" value="" multiple /></label>
+                    <label>C <input type="text" name="C3" value="" multiple /></label>
+                </div>
+                <!-- These names are shared in the same fieldset, therefore these will overwrite the values in the end-->
+                <div style="display: flex; flex-direction: column; padding: 9px;">
+                    <label>A <input type="text" name="A1" value="" multiple /></label>
+                    <label>B <input type="text" name="B2" value="" multiple /></label>
+                    <label>C <input type="text" name="C3" value="" multiple /></label>
+                </div>
+                <label>A <input type="text" name="A" value="" multiple /></label>
+                <label>B <input type="text" name="B" value="" multiple /></label>
+                <label>C <input type="text" name="C" value="" multiple /></label>
+            </fieldset>
+            <fieldset name="B">
+                <label>A <input type="text" name="A" value="" multiple /></label>
+                <label>B <input type="text" name="B" value="" multiple /></label>
+                <label>C <input type="text" name="C" value="" multiple /></label>
+            </fieldset>
+            <fieldset name="tests">
+                <!-- if checkboxes share the same name, the nested-form will write the checked in an array-->
+                <label>cb #1 <input type="checkbox" name="cb" value="asd1" /></label>
+                <label>cb #2 <input type="checkbox" name="cb" value="asd2" /></label>
+                <label>cb #3 <input type="checkbox" name="cb" value="asd3" /></label>
+                <div>
+                    <!-- if checkboxes share the same name, and have no specified values
+                      the nested-form will write only ["on","on","on"] in the array-->
+                    <label>cb-2 #1 <input type="checkbox" name="cb2" /></label>
+                    <label>cb-2 #2 <input type="checkbox" name="cb2" /></label>
+                    <label>cb-2 #3 <input type="checkbox" name="cb2" /></label>
+                </div>
+                <label>R1 <input type="radio" name="rad" value="1" /></label>
+                <label>R2 <input type="radio" name="rad" value="2" /></label>
+                <label>R3 <input type="radio" name="rad" value="3" /></label>
+
+                <select name="s">
+                    <option value="a"> A </option>
+                    <option value="b"> B </option>
+                    <option value="c"> C </option>
+                </select>
+
+                <input  type="time" name="time"/>
+                <div>
+                    <input  type="file" name="file"/>
+                </div>
+            </fieldset>
+            <button type="submit">Submit</button>
+        </form>
+        <pre id="json"></pre>
+    </main>
+</body>
+<script>
+    class NestedForm extends HTMLFormElement {
+        constructor() {
+            super();
+        }
+
+        connectedCallback() {
+            console.log('connected')
+            this.addEventListener('submit', (e) => {
+                e.preventDefault();
+                console.log('submit')
+                const data = new FieldsetAwareFormData(this);
+                console.log(data);
+                document.getElementById('json').innerHTML = JSON.stringify(data.toNestedObject(), undefined, 2);
+            })
+
+        }
+
+    }
+    customElements.define('nested-form', NestedForm, { extends: "form" })
+
+    class FieldsetAwareFormData {
+        constructor(formElement, submitter = null) {
+            this._entries = [];
+
+            if (!formElement || formElement.tagName !== 'FORM') {
+                throw new TypeError("Failed to construct 'FieldsetAwareFormData': parameter 1 is not of type 'HTMLFormElement'.");
+            }
+
+            const elements = formElement.querySelectorAll('input, textarea, select, button, [is]');
+            for (const element of elements) {
+                // 1. Validate form ownership
+                if (element.form !== formElement) continue;
+
+                // 2. Skip disabled elements or elements in disabled fieldsets
+                if (element.disabled || element.closest('fieldset:disabled')) continue;
+
+                // 3. buttons, except the submitter, are irrelevant
+                if ((element.type === 'submit' || element.tagName === 'BUTTON') && element !== submitter) continue;
+
+                // 4.  Unchecked Checkboxes and Radios are irrelevant
+                if ((element.type === 'checkbox' || element.type === 'radio') && !element.checked) continue;
+
+                // 5. Warn unnamed element
+                if (!element.name || element.name === '') {
+                    console.warn("Name every element in the form!", element);
+                    continue;
+                }
+
+                //Map the parent fieldset path
+                const path = this.#getFieldsetPath(element);
+
+                // 6. Value extraction
+                if (element.type === 'file') {
+                    if (element.files.length === 0) {
+                        this.#appendEntry(path, new File([], "", { type: "application/octet-stream" }));
+                    } else {
+                        Array.from(element.files).forEach(file => this.#appendEntry(path, file));
+                    }
+                } else if (element.tagName === 'SELECT') {
+                    Array.from(element.selectedOptions).forEach(option => {
+                        this.#appendEntry(path, option.value);
+                    });
+                } else if (element.type == "checkbox") {
+                    const normalizedValue = element.value.replace(/\r?\n/g, '\r\n');
+                    const a = []
+                    const sameIdx = this._entries.findIndex(e => e.path.every((p, i) => {
+                        return p === path[i]
+                    }));
+                    if (sameIdx > -1) {
+                        const same = this._entries[sameIdx];
+                        if (Array.isArray(same.value)) { same.value.push(normalizedValue) }
+                        else { same.value = [same.value, normalizedValue] }
+                        console.log(this._entries);
+                    } else {
+                        this.#appendEntry(path, normalizedValue);
+                    }
+                } else {
+                    const normalizedValue = element.value.replace(/\r?\n/g, '\r\n');
+                    this.#appendEntry(path, normalizedValue);
+                }
+            };
+        }
+
+        toNestedObject() {
+            const root = {};
+
+            this._entries.forEach(({ path, value }) => {
+                let current = root;
+                for (let i = 0; i < path.length; i++) {
+                    const segment = path[i];
+                    if (i === path.length - 1) {
+                        current[segment] = value;
+                    } else {
+                        if (!current[segment] || typeof current[segment] !== 'object') {
+                            current[segment] = {};
+                        }
+                        current = current[segment];
+                    }
+                }
+            });
+
+            return root;
+        }
+
+        /**
+         *  returns an array of container fieldset names. 
+         */
+        #getFieldsetPath(element) {
+            const segments = [element.name];
+            let current = element;
+
+            while (current) {
+                const fieldset = current.closest('fieldset[name]');
+                if (!fieldset || fieldset === current) break;
+
+                segments.unshift(fieldset.name);
+                current = fieldset;
+            }
+
+            return segments;
+        }
+
+        #appendEntry(pathArray, value) {
+            this._entries.push({ path: pathArray, value: value });
+        }
+
+    }
+
+</script>
+
+</html>
