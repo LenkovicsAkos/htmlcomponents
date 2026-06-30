@@ -1,0 +1,43 @@
+{
+  "name": "@komfortmuhely/htmlcomponents",
+  "version": "0.1.0",
+  "description": "Standalone custom-element components, installable from GitHub.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "./src/*.js"
+  ],
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./tooltip": {
+      "types": "./src/tooltip.d.ts",
+      "import": "./src/tooltip.js"
+    },
+    "./react": {
+      "types": "./src/react.d.ts",
+      "import": "./src/react.js"
+    }
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.0",
+    "typescript": "^5.5.0"
+  }
+}

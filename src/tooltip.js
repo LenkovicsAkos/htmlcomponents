@@ -1,0 +1,135 @@
+// tool-tip — uninteractive informational label for its trigger
+//
+// A short, non-interactive text label shown as a popover near its trigger (the
+// tool-tip's parent element). It appears on hover OR keyboard focus of the
+// trigger and disappears once the cursor leaves and focus moves away (or on
+// Escape). The cursor cannot enter it and its text cannot be selected.
+//
+// On connect it picks a "variant" — which corner it opens into — based on the
+// trigger's position in the viewport, always opening toward the centre so the
+// tooltip never spills off the nearest edge. The chosen variant is reflected
+// on the `variant` attribute. It uses popover="manual": a tooltip is driven
+// entirely by hover/focus, so it must NOT light-dismiss on outside clicks the
+// way popover="auto" does.
+//
+// ARIA: the trigger gets aria-describedby pointing at the tool-tip (role=tooltip
+// + an id). The id lives on this light-DOM element so the IDREF resolves in the
+// trigger's scope; the shadow popover is just visual chrome.
+
+let uid = 0;
+
+export class Tooltip extends HTMLElement {
+    #panel;
+    #trigger = null;
+    #variant = "bottom-right";
+    #hovered = false;
+    #focused = false;
+    #ready = false;
+
+    constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+        this.shadowRoot.innerHTML = `
+<style>
+    [popover] {
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        padding: 0.4em 0.6em;
+        max-width: 16em;
+        border-radius: 4px;
+        background: #111;
+        color: #fff;
+        font: 0.85em/1.35 sans-serif;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .3);
+        pointer-events: none;   /* uninteractive: the cursor can't enter it */
+        user-select: none;      /* ...nor can its text be selected */
+    }
+</style>
+<div popover="manual" role="none"><slot></slot></div>`;
+
+        this.#panel = this.shadowRoot.querySelector("[popover]");
+    }
+
+    get trigger() {
+        return this.parentElement;
+    }
+
+    connectedCallback() {
+        if (this.#ready) return;   // connectedCallback can fire more than once
+        this.#ready = true;
+
+        this.setAttribute("role", "tooltip");
+        if (!this.id) this.id = `tip-${uid++}`;
+
+        const trigger = this.#trigger = this.trigger;
+
+        // Describe the trigger without clobbering an existing reference.
+        const ids = (trigger.getAttribute("aria-describedby") || "")
+            .split(/\s+/).filter(Boolean);
+        if (!ids.includes(this.id)) {
+            ids.push(this.id);
+            trigger.setAttribute("aria-describedby", ids.join(" "));
+        }
+
+        // Pick the corner once, now: open toward the viewport's centre so the
+        // tooltip never spills off the nearest edge.
+        this.#variant = this.#pickVariant();
+        this.setAttribute("variant", this.#variant);
+
+        trigger.addEventListener("mouseenter", () => { this.#hovered = true; this.show(); });
+        trigger.addEventListener("mouseleave", () => { this.#hovered = false; this.#maybeHide(); });
+        trigger.addEventListener("focusin", () => { this.#focused = true; this.show(); });
+        trigger.addEventListener("focusout", () => { this.#focused = false; this.#maybeHide(); });
+        trigger.addEventListener("keydown", (e) => { if (e.key === "Escape") this.hide(); });
+    }
+
+    show() {
+        if (!this.#panel.matches(":popover-open")) this.#panel.showPopover();
+        this.#position();
+    }
+
+    hide() {
+        if (this.#panel.matches(":popover-open")) this.#panel.hidePopover();
+    }
+
+    // Only hide once the trigger is neither hovered nor focused, so a tooltip
+    // shown by focus doesn't vanish when the mouse merely drifts off.
+    #maybeHide() {
+        if (!this.#hovered && !this.#focused) this.hide();
+    }
+
+    // The quadrant of the trigger's centre decides the corner the tooltip
+    // opens into: vertical = below when the trigger sits in the top half,
+    // above otherwise; horizontal = grow rightward from the left edge when in
+    // the left half, leftward from the right edge otherwise.
+    #pickVariant() {
+        const t = this.#trigger.getBoundingClientRect();
+        const vertical = (t.top + t.height / 2) < window.innerHeight / 2 ? "bottom" : "top";
+        const horizontal = (t.left + t.width / 2) < window.innerWidth / 2 ? "right" : "left";
+        return `${vertical}-${horizontal}`;
+    }
+
+    #position() {
+        const t = this.#trigger.getBoundingClientRect();
+        const p = this.#panel.getBoundingClientRect();
+        const gap = 6;
+        const [vertical, horizontal] = this.#variant.split("-");
+
+        let top = vertical === "bottom" ? t.bottom + gap : t.top - p.height - gap;
+        let left = horizontal === "right" ? t.left : t.right - p.width;
+
+        // safety net: keep the box fully within the viewport
+        top = Math.max(4, Math.min(top, window.innerHeight - p.height - 4));
+        left = Math.max(4, Math.min(left, window.innerWidth - p.width - 4));
+
+        this.#panel.style.top = `${top}px`;
+        this.#panel.style.left = `${left}px`;
+    }
+}
+
+// Self-register on import. Guarded so importing twice (or alongside another
+// definer) never throws "already defined".
+if (!customElements.get("tool-tip")) {
+    customElements.define("tool-tip", Tooltip);
+}
